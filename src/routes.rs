@@ -1,8 +1,8 @@
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, io::{self, Read}, time::Instant};
 use may_minihttp::{HttpService, Request, Response};
 use crate::features::auth;
 
-type HandlerFn = fn(&Request, &mut Response) -> io::Result<()>;
+type HandlerFn = fn(&mut Response) -> io::Result<()>;
 
 #[derive(Clone)]
 pub struct ImprovedRouter {
@@ -37,42 +37,66 @@ impl ImprovedRouter {
             .copied()
     }
     
-    fn handle_not_found(&self, _req: &Request, res: &mut Response) -> io::Result<()> {
-        res.status_code(404, "Not Found");
-        res.header("Content-Type: application/json");
-        res.body(r#"{"error": "Route not found", "code": 404}"#);
+    fn handle_not_found(&self, res: &mut Response) -> io::Result<()> {
+        res.status_code(404, "Not Found")
+        .header("Content-Type: application/json")
+        .body(r#"{"error": "Route not found", "code": 404}"#);
         Ok(())
     }
     
-    fn handle_method_not_allowed(&self, _req: &Request, res: &mut Response) -> io::Result<()> {
-        res.status_code(405, "Method Not Allowed");
-        res.header("Content-Type: application/json");
-        res.body(r#"{"error": "Method not allowed", "code": 405}"#);
+    fn handle_method_not_allowed(&self, res: &mut Response) -> io::Result<()> {
+        res.status_code(405, "Method Not Allowed")
+        .header("Content-Type: application/json")
+        .body(r#"{"error": "Method not allowed", "code": 405}"#);
         Ok(())
     }
 }
 
 impl HttpService for ImprovedRouter {
     fn call(&mut self, req: Request, res: &mut Response) -> io::Result<()> {
-        let method = req.method();
-        let path = req.path();
+        // let body = req.body();
+        let method = req.method().to_owned();
+        let path = req.path().to_owned();
+        // let body = req.body();
+
+        let mut body_content = String::new();
+        if let Err(e) = req.body().read_to_string(&mut body_content) {
+            println!("Error reading body: {}", e);
+            res.status_code(400, "Bad Request");
+            res.body(r#"{"error": "Could not read request body"}"#);
+            return Ok(());
+        }
+
+        println!("Body content: {}", body_content);
+
+        let start = Instant::now();
+
+        println!("[REQ] {} {}", method, path);
+        // log::info!("[REQ] {} {}", &req.method(), &req.path());
+
+        // let mut body_content = String::new();
+        // if let Err(e) = req.body().read_to_end(&mut body_content) {
+        //     println!("Error reading body: {}", e);
+        //     res.status_code(400, "Bad Request");
+        //     res.body(r#"{"error": "Could not read request body"}"#);
+        //     return Ok(());
+        // }
         
-        match self.find_handler(method, path) {
-            Some(handler) => handler(&req, res),
+        
+        let result = match self.find_handler(&method, &path) {
+            Some(handler) => handler(res),
             None => {
-                if self.routes.contains_key(path) {
-                    self.handle_method_not_allowed(&req, res)
+                if self.routes.contains_key(&path) {
+                    self.handle_method_not_allowed(res)
                 } else {
-                    self.handle_not_found(&req, res)
+                    self.handle_not_found(res)
                 }
             }
-        }
-    }
-}
+        };
 
-pub fn health_check(_req: &Request, res: &mut Response) -> io::Result<()> {
-    res.status_code(200, "OK");
-    res.header("Content-Type: application/json");
-    res.body(r#"{"status": "ok", "timestamp": "2024-01-01T00:00:00Z"}"#);
-    Ok(())
+        println!("[RES] {} {} -> took {:?})", &method, &path, start.elapsed());
+        // log::info!("[RES] {} {} -> took {:?})", &req.method(), &req.path(), start.elapsed());
+
+        result
+    }
 }

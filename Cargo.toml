@@ -4,5 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-may_minihttp = "0.1"
+tokio = { version = "1.46.1", features = ["full"] }
 
+may_minihttp = "0.1"
+log = "0.4"
+env_logger = "0.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+
+[dev-dependencies]
+anyhow = "1.0.72"
+httpc-test = "0.1.1"
