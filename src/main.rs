@@ -6,7 +6,7 @@ fn main() {
     env_logger::init();
     let mut improved_router = ImprovedRouter::new();
     improved_router.register_auth_routes();
-    improved_router.register("GET", "/", |res| {
+    improved_router.register("GET", "/", |res, _body| {
         res.status_code(200, "OK");
         res.header("Content-Type: application/json");
         res.body(r#"Hello from May Mini!"#);

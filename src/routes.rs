@@ -1,8 +1,8 @@
 use std::{collections::HashMap, io::{self, Read}, time::Instant};
 use may_minihttp::{HttpService, Request, Response};
-use crate::features::auth;
+use crate::features::auth::{self};
 
-type HandlerFn = fn(&mut Response) -> io::Result<()>;
+type HandlerFn = fn(&mut Response, String) -> io::Result<()>;
 
 #[derive(Clone)]
 pub struct ImprovedRouter {
@@ -24,10 +24,8 @@ impl ImprovedRouter {
     }
     
     pub fn register_auth_routes(&mut self) {
-        // self.register("POST", "/api/auth/register", auth::create_user);
-        // self.register("POST", "/api/auth/login", auth::login_user);
-        self.register("GET", "/api/auth", auth::handler::get_auth);
-        self.register("POST", "/api/auth", auth::handler::create_user);
+        self.register("POST", "/api/auth/login", auth::handler::login);
+        self.register("POST", "/api/auth/register", auth::handler::create_user);
     }
     
     fn find_handler(&self, method: &str, path: &str) -> Option<HandlerFn> {
@@ -54,37 +52,26 @@ impl ImprovedRouter {
 
 impl HttpService for ImprovedRouter {
     fn call(&mut self, req: Request, res: &mut Response) -> io::Result<()> {
-        // let body = req.body();
         let method = req.method().to_owned();
         let path = req.path().to_owned();
-        // let body = req.body();
 
         let mut body_content = String::new();
-        if let Err(e) = req.body().read_to_string(&mut body_content) {
-            println!("Error reading body: {}", e);
-            res.status_code(400, "Bad Request");
-            res.body(r#"{"error": "Could not read request body"}"#);
-            return Ok(());
+        if method == "POST" {
+            if let Err(e) = req.body().read_to_string(&mut body_content) {
+                println!("Error reading body: {}", e);
+                res.status_code(400, "Bad Request");
+                res.body(r#"{"error": "Could not read request body"}"#);
+                return Ok(());
+            }
         }
-
-        println!("Body content: {}", body_content);
 
         let start = Instant::now();
 
         println!("[REQ] {} {}", method, path);
         // log::info!("[REQ] {} {}", &req.method(), &req.path());
-
-        // let mut body_content = String::new();
-        // if let Err(e) = req.body().read_to_end(&mut body_content) {
-        //     println!("Error reading body: {}", e);
-        //     res.status_code(400, "Bad Request");
-        //     res.body(r#"{"error": "Could not read request body"}"#);
-        //     return Ok(());
-        // }
-        
         
         let result = match self.find_handler(&method, &path) {
-            Some(handler) => handler(res),
+            Some(handler) => handler(res, body_content),
             None => {
                 if self.routes.contains_key(&path) {
                     self.handle_method_not_allowed(res)
